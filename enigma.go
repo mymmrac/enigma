@@ -7,55 +7,68 @@ import (
 	"strings"
 )
 
-const separator = ","
-
+// Enigma represents enigma machine
 type Enigma struct {
 	reflector reflector
 	plugboard plugboard
-	rotors    []*rotor
+	rotors    []rotor
 }
 
+// RotorConfig represents rotor configuration
 type RotorConfig struct {
-	ID    string
+	Name  string
 	Start byte
 	Ring  int
 }
 
-func NewEnigma(rotorConfiguration []RotorConfig, refID string, plugs []string) *Enigma {
-	rotors := make([]*rotor, len(rotorConfiguration))
+// NewEnigma creates new enigma
+func NewEnigma(rotorConfiguration []RotorConfig, reflectorName string, plugs []string) (*Enigma, error) {
+	ok := false
+	rotors := make([]rotor, len(rotorConfiguration))
 	for i, configuration := range rotorConfiguration {
-		rotors[i] = historicRotors.GetByID(configuration.ID)
-		rotors[i].Offset = char(configuration.Start)
-		rotors[i].Ring = configuration.Ring - 1
+		rotors[i], ok = historicalRotors[configuration.Name]
+		if !ok {
+			return nil, errors.New("rotor not found")
+		}
+
+		rotors[i].setConfiguration(char(configuration.Start), configuration.Ring-1)
+	}
+
+	selectedReflector, ok := historicalReflectors[reflectorName]
+	if !ok {
+		return nil, errors.New("reflector not found")
 	}
 
 	return &Enigma{
-		reflector: *historicReflectors.GetByID(refID),
-		plugboard: *newPlugboard(plugs),
+		reflector: selectedReflector,
+		plugboard: newPlugboard(plugs),
 		rotors:    rotors,
-	}
+	}, nil
 }
 
-func NewEnigmaFromConfig(rotors, positions, rings, reflector, plugboard string) (*Enigma, error) {
+// NewEnigmaParse creates new enigma from configuration
+func NewEnigmaParse(rotors, positions, rings, reflector, plugboard string) (*Enigma, error) {
 	if err := validateFormat(rotors, positions, rings, reflector, plugboard); err != nil {
 		return nil, err
 	}
 
 	var rotorsConfigs []RotorConfig
 
-	rotorIDs := strings.Split(rotors, separator)
+	rotorNames := strings.Split(rotors, separator)
 	positionChars := strings.Split(positions, separator)
 	ringsNumbers := strings.Split(rings, separator)
 
-	if len(rotorIDs) != len(positionChars) || len(rotorIDs) != len(ringsNumbers) {
+	if len(rotorNames) != numberOfRotors ||
+		len(positionChars) != numberOfRotors ||
+		len(ringsNumbers) != numberOfRotors {
 		return nil, errors.New("number of rotors, positions and rings must be the same")
 	}
 
-	for i := 0; i < len(rotorIDs); i++ {
+	for i := 0; i < len(rotorNames); i++ {
 		ring, _ := strconv.Atoi(ringsNumbers[i])
 
 		rotorsConfigs = append(rotorsConfigs, RotorConfig{
-			ID:    rotorIDs[i],
+			Name:  rotorNames[i],
 			Start: positionChars[i][0],
 			Ring:  ring,
 		})
@@ -63,31 +76,22 @@ func NewEnigmaFromConfig(rotors, positions, rings, reflector, plugboard string) 
 
 	plugboardPairs := strings.Split(plugboard, separator)
 
-	return NewEnigma(rotorsConfigs, reflector, plugboardPairs), nil
+	return NewEnigma(rotorsConfigs, reflector, plugboardPairs)
 }
 
 func (e *Enigma) moveRotors() {
-	var (
-		rotorLen            = len(e.rotors)
-		farRight            = e.rotors[rotorLen-1]
-		farRightTurnover    = farRight.ShouldTurnOver()
-		secondRight         = e.rotors[rotorLen-2]
-		secondRightTurnover = secondRight.ShouldTurnOver()
-		thirdRight          = e.rotors[rotorLen-3]
-	)
-
-	if secondRightTurnover {
-		if !farRightTurnover {
-			secondRight.move(1)
+	if e.rotors[1].isTurnOver() {
+		if !e.rotors[2].isTurnOver() {
+			e.rotors[1].move()
 		}
-		thirdRight.move(1)
+		e.rotors[0].move()
 	}
 
-	if farRightTurnover {
-		secondRight.move(1)
+	if e.rotors[2].isTurnOver() {
+		e.rotors[1].move()
 	}
 
-	farRight.move(1)
+	e.rotors[2].move()
 }
 
 func (e *Enigma) EncodeChar(letter byte) byte {
@@ -97,13 +101,13 @@ func (e *Enigma) EncodeChar(letter byte) byte {
 	letterIndex = e.plugboard[letterIndex]
 
 	for i := len(e.rotors) - 1; i >= 0; i-- {
-		letterIndex = e.rotors[i].Step(letterIndex, false)
+		letterIndex = e.rotors[i].step(letterIndex, false)
 	}
 
-	letterIndex = e.reflector.Sequence[letterIndex]
+	letterIndex = e.reflector[letterIndex]
 
 	for i := 0; i < len(e.rotors); i++ {
-		letterIndex = e.rotors[i].Step(letterIndex, true)
+		letterIndex = e.rotors[i].step(letterIndex, true)
 	}
 
 	letterIndex = e.plugboard[letterIndex]

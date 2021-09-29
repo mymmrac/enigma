@@ -1,10 +1,10 @@
 package enigma
 
-type plugboard [26]int
+type plugboard [numberOfLetters]int
 
-func newPlugboard(pairs []string) *plugboard {
+func newPlugboard(pairs []string) plugboard {
 	p := plugboard{}
-	for i := 0; i < 26; i++ {
+	for i := 0; i < numberOfLetters; i++ {
 		p[i] = i
 	}
 
@@ -17,5 +17,5 @@ func newPlugboard(pairs []string) *plugboard {
 		}
 	}
 
-	return &p
+	return p
 }

@@ -28,7 +28,8 @@ func main() {
 		return
 	}
 
-	e, err := enigma.NewEnigmaFromConfig(*rotorsOptions, *positionOptions, *ringsOptions, *reflectorOption, *plugboardOptions)
+	e, err := enigma.NewEnigmaParse(
+		*rotorsOptions, *positionOptions, *ringsOptions, *reflectorOption, *plugboardOptions)
 	if err != nil {
 		fmt.Println("Invalid configuration:", err)
 		os.Exit(1)
